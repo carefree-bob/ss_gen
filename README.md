@@ -1,1 +1,1 @@
-# ss_gen
+# Static Site Generator for boots.dev project
