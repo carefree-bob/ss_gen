@@ -1,9 +1,8 @@
 import re
-from typing import Text
 from enum import Enum
 
-from src.textnode import TextNode
-from src.textnode import TextType as TextType
+from .textnode import TextNode
+from .textnode import TextType as TextType
 
 mdown_link = re.compile(r"(?<!!)\[([^\[\]]*)\]\(([^\(\)]*)\)")
 mdown_img = re.compile(r"!\[([^\[\]]*)\]\(([^\(\)]*)\)")
@@ -103,15 +102,16 @@ def text_node_to_html_node(text_node: TextNode)->LeafNode:
         case TextType.ITALIC:
             return LeafNode(tag="i", value=text_node.text)
         case TextType.IMAGE:
-            if not text_node.props:
+            if not text_node.url:
                 raise ValueError("missing properties for image type")
 
-            new_props = {x:v for (x, v) in text_node.props.items() if x in ["alt", "src"]} 
-
-            if not new_props:
-                raise ValueError("missing attributes for image")
-
-            return LeafNode(tag="a", value=None, props=new_props)
+            new_props = {"src": text_node.url}
+            return LeafNode(tag="img", value=text_node.text, props=new_props)
+        case TextType.LINKS:
+            if not text_node.url:
+                raise ValueError("no url")
+            new_props = {"href": text_node.url}
+            return LeafNode(tag="a", value=text_node.text, props=new_props)
         case _:
             raise ValueError("Illegal type")
             
@@ -244,7 +244,7 @@ def block_to_html_nodes(markdown: str) -> list[ParentNode | LeafNode | HTMLNode]
             for x in markdown.split('\n'):
                 if not x.strip():
                     continue
-                l=span_to_leaf_nodes(x[hn:])
+                l=span_to_leaf_nodes(x[hn:].strip())
                 p=ParentNode(tag=f'h{heading_num}', children=l)
                 accum.append(p)
             return accum
@@ -264,7 +264,7 @@ def block_to_html_nodes(markdown: str) -> list[ParentNode | LeafNode | HTMLNode]
             accum = []
             for line in lines:
                 m = re.findall(r'^([0-9])\.', line)
-                accum.append(ParentNode(tag='li', children=span_to_leaf_nodes(line[m[0].start:])))
+                accum.append(ParentNode(tag='li', children=span_to_leaf_nodes(line[len(m[0])+2:])))
 
             return [ParentNode(tag='ol', children=accum)]
 
@@ -272,7 +272,10 @@ def block_to_html_nodes(markdown: str) -> list[ParentNode | LeafNode | HTMLNode]
             lines = [x for x in markdown.split('\n') if x.strip()]
             accum = []
             for line in lines:
-                accum.append(ParentNode(tag='p', children=span_to_leaf_nodes(line[1:])))
+                if line == '>':
+                    # accum.append(LeafNode(tag="p", value=' '))
+                    continue
+                accum.extend(span_to_leaf_nodes(line[1:].strip()))
 
             return [ParentNode(tag='blockquote', children=accum)]
 
