@@ -1,9 +1,10 @@
 import unittest
 
-from htmlnode import markdown_to_blocks
+
+from htmlnode import markdown_to_blocks, block_to_block_type, BlockType
 from htmlnode import HTMLNode, LeafNode, ParentNode
 from htmlnode import text_node_to_html_node as t2h
-from htmlnode import extract_markdown_images, extract_markdown_links
+from htmlnode import extract_markdown_images, extract_markdown_links, block_to_html
 from htmlnode import split_nodes_delimiter as split_delim
 from htmlnode import split_nodes_image, split_nodes_link, text_to_textnodes
 from textnode import TextNode, TextType
@@ -152,6 +153,35 @@ This is the same paragraph on a new line
                 "- This is a list\n- with items",
             ],
         )
+
+    def test_block_type_heading(self):
+        mkdn = "# muh heading"
+        assert block_to_block_type(mkdn) is BlockType.HEADING
+
+    def test_block_type_code(self):
+        m = "```muh code```"
+        assert block_to_block_type(m) is BlockType.CODE
+
+    def test_block_type_ulist(self):
+        m = "- foo\n- bar"
+        assert block_to_block_type(m) is BlockType.UNORDERED_LIST
+
+    def test_block_type_olist(self):
+        m = "1. muh\n2. list"
+        print(f"****{block_to_block_type(m)}")
+        assert block_to_block_type(m) is BlockType.ORDERED_LIST
+
+    def test_block_type_vanilla(self):
+        m = "muh vanilla"
+        assert block_to_block_type(m) is BlockType.PARAGRAPH
+
+    def test_block_to_html_h1(self):
+        m1 = "- listen _to_ this\n- or **not**!!"
+        res = block_to_html(m1)
+        print(res)
+        assert True
+
+
 
 
 

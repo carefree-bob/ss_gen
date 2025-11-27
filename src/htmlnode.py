@@ -1,11 +1,29 @@
 import re
 from typing import Text
+from enum import Enum
 
 from textnode import TextNode
 from textnode import TextType as TextType
 
 mdown_link = re.compile(r"(?<!!)\[([^\[\]]*)\]\(([^\(\)]*)\)")
 mdown_img = re.compile(r"!\[([^\[\]]*)\]\(([^\(\)]*)\)")
+
+"""
+Block Types:
+paragraph
+heading
+code
+quote
+unordered_list
+ordered_list
+"""
+class BlockType(Enum):
+    PARAGRAPH = "paragraph"
+    HEADING = "heading"
+    CODE = "code"
+    QUOTE = "quote"
+    UNORDERED_LIST = "unordered list"
+    ORDERED_LIST = "ordered list"
 
 
 class HTMLNode:
@@ -174,4 +192,80 @@ def markdown_to_blocks(markdown: str):
     blocks = markdown.split("\n\n") 
     blocks = [b.strip() for b in blocks if b]
     return blocks
+
+def block_to_block_type(markdown: str) -> BlockType:
+    # we should be taking in only a single block
+    assert "\n\n" not in markdown
+    
+    if markdown.startswith("#"):
+        return BlockType.HEADING
+    elif markdown.startswith('```') and markdown[-3:] == '```':
+        return BlockType.CODE
+    else:
+        splits = markdown.split('\n')
+
+        if splits[0].startswith('>'):
+            for i in range(1, len(splits)):
+                if not splits[i].startswith('>'):
+                    return BlockType.PARAGRAPH
+            return BlockType.QUOTE
+    
+        elif splits[0].startswith('- '):
+            for i in range(1, len(splits)):
+                if not splits[i].startswith('- '):
+                    return BlockType.PARAGRAPH
+            return BlockType.UNORDERED_LIST
+
+        elif splits[0].startswith("1. "):
+            for i in range(1, len(splits)):
+                if not splits[i].startswith(f"{i+1}. "):
+                    return BlockType.PARAGRAPH
+            return BlockType.ORDERED_LIST
+    
+    return BlockType.PARAGRAPH
+
+def span_to_html(text: str) -> str:
+    nodes = text_to_textnodes(text)
+    return ''.join([text_node_to_html_node(t).to_html() for t in nodes])
+
+def block_to_html(markdown: str) -> str:
+    b_type = block_to_block_type(markdown)
+    match(b_type):
+        case BlockType.CODE:
+            return f'<pre><code>{markdown}<code></pre>'
+
+        case BlockType.HEADING:
+            lines = markdown.split('\n')
+            match_ = re.findall(r'^(#+)', lines[0])
+            heading_num = len(match_[0])
+            hn = min(6, heading_num)  # only go up to 6
+            return ''.join([f'<h{heading_num}>{span_to_html(x[hn:])}</h{heading_num}>' for x in markdown.split('\n')])
+
+        case BlockType.UNORDERED_LIST:
+            lines = markdown.split('\n')
+            accum = '<ul>'
+            for line in lines:
+                accum += f'<li>{span_to_html(line[2:])}</li>'
+            accum += '</ul>'
+            return accum
+        
+        case BlockType.ORDERED_LIST:
+            lines = markdown.split('\n')
+            accum = '<ol>'
+            for line in lines:
+                m = re.findall(r'^([0-9])\.', line)
+                accum += f'<li>{span_to_html(line[m[0].start:])}</li>'
+            accum += '</ol>'
+            return accum
+
+        case BlockType.QUOTE:
+            lines = markdown.split('\n')
+            accum = '<blockquote>'
+            for line in lines:
+                accum +=span_to_html(line[1:])
+            accum += '</blockquote>'
+            return accum
+
+        case _:
+            return f'<p>{span_to_html(markdown)}</p>'
 
