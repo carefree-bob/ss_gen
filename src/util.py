@@ -7,9 +7,9 @@ def clean(dest):
         if files:
             [os.remove(os.path.join(root, f)) for f in files]
         if dirs:
-            [os.remove(os.path.join(root, d)) for d in dirs]
+            [os.rmdir(os.path.join(root, d)) for d in dirs]
         if root != dest:
-            os.remove(root)
+            os.rmdir(root)
     
 
 def copy_to_public(src, dest):
