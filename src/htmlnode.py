@@ -2,8 +2,8 @@ import re
 from typing import Text
 from enum import Enum
 
-from textnode import TextNode
-from textnode import TextType as TextType
+from src.textnode import TextNode
+from src.textnode import TextType as TextType
 
 mdown_link = re.compile(r"(?<!!)\[([^\[\]]*)\]\(([^\(\)]*)\)")
 mdown_img = re.compile(r"!\[([^\[\]]*)\]\(([^\(\)]*)\)")
@@ -43,7 +43,7 @@ class HTMLNode:
         """
         if self.props:
             attr_list = [f'{x}="{y}"' for x,y in self.props.items()]
-            return " ".join(attr_list).strip()
+            return " ".join(attr_list).replace('\n', ' ').strip()
         else:
             return ""
 
@@ -52,7 +52,7 @@ class HTMLNode:
 
 
 class LeafNode(HTMLNode):
-    def __init__(self, tag:str|None=None, value: str|None=None, children:list[HTMLNode]|None=None, props:dict[str,str] | None=None):
+    def __init__(self, tag:str|None=None, value: str|None=None, children:list[ParentNode | LeafNode | HTMLNode]|None=None, props:dict[str,str] | None=None):
         if children:
             raise ValueError("No kids allowed in Leafland!!")
         if not value:
@@ -68,7 +68,7 @@ class LeafNode(HTMLNode):
             return f'<{self.tag} {self.props_to_html()}>{self.value}</{self.tag}>'
 
 class ParentNode(HTMLNode):
-    def __init__(self, tag:str|None=None, value: str|None=None, children:list[HTMLNode]|None=None, props:dict[str,str] | None=None):
+    def __init__(self, tag:str|None=None, value: str|None=None, children:list[HTMLNode| ParentNode | LeafNode]|None=None, props:dict[str,str] | None=None):
         if not tag or not children:
             raise ValueError("What kind of parent are you?")
         if value:
@@ -126,10 +126,8 @@ def split_nodes_delimiter(old_nodes: list[TextNode], delimiter, text_type)-> lis
         splits = node.text.split(delimiter)
         for index, text_ in enumerate(splits, start=0):
             if index % 2 == 0:
-                in_delim = False
                 accum.append(TextNode(text=text_, text_type=TextType.TEXT))
             else:
-                in_delim = True
                 accum.append(TextNode(text=text_, text_type=text_type))
     return accum
 
@@ -202,7 +200,7 @@ def block_to_block_type(markdown: str) -> BlockType:
     elif markdown.startswith('```') and markdown[-3:] == '```':
         return BlockType.CODE
     else:
-        splits = markdown.split('\n')
+        splits = [x.strip() for x in markdown.split('\n') if x.strip()]
 
         if splits[0].startswith('>'):
             for i in range(1, len(splits)):
@@ -224,48 +222,71 @@ def block_to_block_type(markdown: str) -> BlockType:
     
     return BlockType.PARAGRAPH
 
-def span_to_html(text: str) -> str:
+def span_to_leaf_nodes(text: str) -> list[LeafNode]:
     nodes = text_to_textnodes(text)
-    return ''.join([text_node_to_html_node(t).to_html() for t in nodes])
+    return [text_node_to_html_node(t) for t in nodes]
 
-def block_to_html(markdown: str) -> str:
+
+def block_to_html_nodes(markdown: str) -> list[ParentNode | LeafNode | HTMLNode]:
     b_type = block_to_block_type(markdown)
-    match(b_type):
+    match b_type:
         case BlockType.CODE:
-            return f'<pre><code>{markdown}<code></pre>'
+            l = LeafNode(tag="code", value=markdown[3:-3].lstrip())
+            r = ParentNode(tag="pre", value=None, children=[l])
+            return [r]
 
         case BlockType.HEADING:
-            lines = markdown.split('\n')
+            lines = [x.strip() for x in markdown.split('\n') if x.strip()]
             match_ = re.findall(r'^(#+)', lines[0])
             heading_num = len(match_[0])
-            hn = min(6, heading_num)  # only go up to 6
-            return ''.join([f'<h{heading_num}>{span_to_html(x[hn:])}</h{heading_num}>' for x in markdown.split('\n')])
+            hn = min(6, heading_num)
+            accum = []
+            for x in markdown.split('\n'):
+                if not x.strip():
+                    continue
+                l=span_to_leaf_nodes(x[hn:])
+                p=ParentNode(tag=f'h{heading_num}', children=l)
+                accum.append(p)
+            return accum
 
         case BlockType.UNORDERED_LIST:
-            lines = markdown.split('\n')
-            accum = '<ul>'
+            lines = [x.strip() for x in markdown.split('\n') if x.strip()]
+            accum = []
+
             for line in lines:
-                accum += f'<li>{span_to_html(line[2:])}</li>'
-            accum += '</ul>'
-            return accum
+                p = ParentNode(tag='li', children=span_to_leaf_nodes(line[2:]))
+                accum.append(p)
+
+            return [ParentNode(tag='ul', children=accum)]
         
         case BlockType.ORDERED_LIST:
-            lines = markdown.split('\n')
-            accum = '<ol>'
+            lines = [x for x in markdown.split('\n') if x.strip()]
+            accum = []
             for line in lines:
                 m = re.findall(r'^([0-9])\.', line)
-                accum += f'<li>{span_to_html(line[m[0].start:])}</li>'
-            accum += '</ol>'
-            return accum
+                accum.append(ParentNode(tag='li', children=span_to_leaf_nodes(line[m[0].start:])))
+
+            return [ParentNode(tag='ol', children=accum)]
 
         case BlockType.QUOTE:
-            lines = markdown.split('\n')
-            accum = '<blockquote>'
+            lines = [x for x in markdown.split('\n') if x.strip()]
+            accum = []
             for line in lines:
-                accum +=span_to_html(line[1:])
-            accum += '</blockquote>'
-            return accum
+                accum.append(ParentNode(tag='p', children=span_to_leaf_nodes(line[1:])))
+
+            return [ParentNode(tag='blockquote', children=accum)]
 
         case _:
-            return f'<p>{span_to_html(markdown)}</p>'
+            return [ParentNode(tag='p', children=span_to_leaf_nodes(clean_markdown_whitespace(markdown)))]
+
+def clean_markdown_whitespace(markdown: str) -> str:
+    return re.sub(r'\s+', ' ', markdown).strip()
+
+def markdown_to_html_node(text)->HTMLNode:
+    blocks = markdown_to_blocks(text)
+    accum = []
+    for b in blocks:
+        accum.extend(block_to_html_nodes(b))
+    return ParentNode(tag='div', children=accum)
+
 

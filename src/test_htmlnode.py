@@ -1,13 +1,13 @@
 import unittest
 
 
-from htmlnode import markdown_to_blocks, block_to_block_type, BlockType
-from htmlnode import HTMLNode, LeafNode, ParentNode
-from htmlnode import text_node_to_html_node as t2h
-from htmlnode import extract_markdown_images, extract_markdown_links, block_to_html
-from htmlnode import split_nodes_delimiter as split_delim
-from htmlnode import split_nodes_image, split_nodes_link, text_to_textnodes
-from textnode import TextNode, TextType
+from src.htmlnode import markdown_to_blocks, block_to_block_type, BlockType
+from src.htmlnode import HTMLNode, LeafNode, ParentNode
+from src.htmlnode import text_node_to_html_node as t2h
+from src.htmlnode import extract_markdown_images, extract_markdown_links, block_to_html_nodes, markdown_to_html_node
+from src.htmlnode import split_nodes_delimiter as split_delim
+from src.htmlnode import split_nodes_image, split_nodes_link, text_to_textnodes
+from src.textnode import TextNode, TextType
 
 
 
@@ -15,7 +15,6 @@ class TestNode(unittest.TestCase):
     def test_repr(self):
         a = HTMLNode(children=None, props={"href": "foo"}, tag="a", value="click me!")
         s = repr(a)
-        print(s)
         assert s.startswith("(HTMLNODE)")
 
     def test_props_to_html(self):
@@ -117,9 +116,6 @@ class GeneralTest(unittest.TestCase):
              " and a [link](https://boot.dev)")
 
         out = text_to_textnodes(input)
-        print("===================")
-        print("\n".join([repr(x) for x in out]))
-        print("\n==================")
 
         self.assertCountEqual(out, [
                 TextNode("This is ", TextType.TEXT),
@@ -168,19 +164,44 @@ This is the same paragraph on a new line
 
     def test_block_type_olist(self):
         m = "1. muh\n2. list"
-        print(f"****{block_to_block_type(m)}")
         assert block_to_block_type(m) is BlockType.ORDERED_LIST
 
     def test_block_type_vanilla(self):
         m = "muh vanilla"
         assert block_to_block_type(m) is BlockType.PARAGRAPH
 
-    def test_block_to_html_h1(self):
-        m1 = "- listen _to_ this\n- or **not**!!"
-        res = block_to_html(m1)
-        print(res)
-        assert True
 
+    def test_paragraphs(self):
+        md = """
+This is **bolded** paragraph
+text in a p
+tag here
+
+This is another paragraph with _italic_ text and `code` here
+
+"""
+
+        node = markdown_to_html_node(md)
+        html = node.to_html()
+        self.assertEqual(
+            html,
+            "<div><p>This is <b>bolded</b> paragraph text in a p tag here</p><p>This is another paragraph with <i>italic</i> text and <code>code</code> here</p></div>",
+        )
+
+    def test_codeblock(self):
+        md = """
+```
+This is text that _should_ remain
+the **same** even with inline stuff
+```
+"""
+
+        node = markdown_to_html_node(md)
+        html = node.to_html()
+        self.assertEqual(
+            html,
+            "<div><pre><code>This is text that _should_ remain\nthe **same** even with inline stuff\n</code></pre></div>",
+        )
 
 
 
