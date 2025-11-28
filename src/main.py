@@ -1,7 +1,7 @@
 import os
 
-from .util import copy_to_public
 from .htmlnode import markdown_to_html_node
+from .util import copy_to_public
 from .util import extract_title
 
 script_dir = os.path.dirname(__file__)
@@ -25,23 +25,33 @@ def generate_page(from_path: str, template_path: str, dest_path: str)->None:
     with open(dest_path, 'w') as fp:
         fp.write(templ)
 
+def generate_pages(src, template_path, dest):
+    """take all md templates under src, render them according to template
+    and store under parallel directory in dest
+    """
+    for root_, dirs, files in os.walk(src):
+        rel = os.path.relpath(root_, src)
+        dst_dir = os.path.join(dest, rel)
 
+        os.makedirs(dst_dir, exist_ok=True)
 
+        for f in files:
+            from_path = os.path.join(root_, f)
+            dest_path = os.path.join(dst_dir,f).replace(".md", ".html")
 
-
+            generate_page(from_path, template_path=template_path, dest_path=dest_path)
 
 
 
 def main():
-    print(f"copying {public_dir}...")
-    print(f"deleting {static_dir}...")
+    # empty public and fill with static resources
+    print(f"deleting {public_dir}...")
+    print(f"copying from {static_dir}...")
     copy_to_public(static_dir, public_dir)
 
-    content_path = os.path.join(content_dir, 'index.md')
     template_path = os.path.join(root, 'template.html')
-    index_path = os.path.join(public_dir, 'index.html')
 
-    generate_page(content_path, template_path=template_path, dest_path=index_path)
+    generate_pages(src=content_dir, template_path=template_path, dest=public_dir)
 
 
 if __name__ == "__main__":
